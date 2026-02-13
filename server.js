@@ -1,5 +1,5 @@
 /**
- * server.js — Full working version with subscriber DB + Payhip webhooks
+ * server.js — Fixed version for Render deployment
  */
 
 const express = require("express");
@@ -10,7 +10,7 @@ const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // ✅ Use Render dynamic port
 
 /*
 ========================================
@@ -22,6 +22,7 @@ const subscribersFile = path.join(__dirname, "data", "subscribers.json");
 // Read subscribers
 function getSubscribers() {
   try {
+    if (!fs.existsSync(subscribersFile)) fs.writeFileSync(subscribersFile, "[]");
     const data = fs.readFileSync(subscribersFile);
     return JSON.parse(data);
   } catch (err) {
@@ -68,7 +69,7 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: "gaston.ditommaso.2@gmail.com",      // 👈 change
-    pass: "mhrj phih frap xrkm"              // 👈 change
+    pass: "mhrj phih frap xrkm"                 // 👈 change
   }
 });
 
@@ -77,9 +78,9 @@ const transporter = nodemailer.createTransport({
 🌿 MIDDLEWARE
 ========================================
 */
-app.use(express.json());
+app.use(express.json()); // ✅ parse JSON for webhooks and POST requests
 app.use(express.urlencoded({ extended: true }));
-app.use("/output", express.static(path.join(__dirname, "output"))); // serve generated videos
+app.use("/output", express.static(path.join(__dirname, "output"))); // serve videos
 
 // Auth middleware for magic links
 function requireAuth(req, res, next) {
@@ -132,7 +133,7 @@ app.post("/send-link", async (req, res) => {
   const token = crypto.randomBytes(24).toString("hex");
   tokens[token] = email;
 
-  const link = `http://localhost:${PORT}/verify?token=${token}`;
+  const link = `${process.env.BASE_URL || "http://localhost:" + PORT}/verify?token=${token}`;
 
   await transporter.sendMail({
     from: "Greeting Cards",
@@ -273,7 +274,6 @@ app.post("/render-video", requireAuth, (req, res) => {
 🌿 PAYHIP WEBHOOKS
 ========================================
 */
-app.use(express.json());
 app.post("/payhip-webhook", (req, res) => {
   const { event, email } = req.body;
   if (!email) return res.status(400).send("No email provided");
@@ -307,10 +307,3 @@ app.get("/debug-subs", (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
-
-
-
-
-
-
-
