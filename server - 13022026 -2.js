@@ -1,112 +1,79 @@
 /**
- * server.js — Full working version with subscriber DB + Payhip webhooks
+ * server.js — Full working version with Payhip membership check
  */
 
 const express = require("express");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const path = require("path");
-const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
+const fetch = require("node-fetch"); // for Payhip API calls
 
 const app = express();
 const PORT = 3000;
 
-/*
-========================================
-🌿 SUBSCRIBERS DATABASE (JSON)
-========================================
-*/
-const subscribersFile = path.join(__dirname, "data", "subscribers.json");
-
-// Read subscribers
-function getSubscribers() {
-  try {
-    const data = fs.readFileSync(subscribersFile);
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Error reading subscribers.json:", err);
-    return [];
-  }
-}
-
-// Add subscriber
-function addSubscriber(email) {
-  const subs = getSubscribers();
-  if (!subs.includes(email.toLowerCase())) {
-    subs.push(email.toLowerCase());
-    fs.writeFileSync(subscribersFile, JSON.stringify(subs, null, 2));
-  }
-}
-
-// Remove subscriber
-function removeSubscriber(email) {
-  let subs = getSubscribers();
-  subs = subs.filter(e => e.toLowerCase() !== email.toLowerCase());
-  fs.writeFileSync(subscribersFile, JSON.stringify(subs, null, 2));
-}
-
-// Check subscription
-function isSubscribed(email) {
-  const subs = getSubscribers();
-  return subs.some(e => e.toLowerCase() === email.toLowerCase());
-}
-
-/*
-========================================
-🌿 TEMP TOKENS (magic link)
-========================================
-*/
+// ================================
+// 🌿 TEMP TOKENS STORAGE
+// ================================
 const tokens = {}; // token -> email
 
-/*
-========================================
-📨 MAILER SETUP (Gmail)
-========================================
-*/
+// ================================
+// 📨 MAILER SETUP (Gmail)
+// ================================
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "gaston.ditommaso.2@gmail.com",      // 👈 change
-    pass: "mhrj phih frap xrkm"              // 👈 change
+    user: "gaston.ditommaso.2@gmail.com", // change
+    pass: "mhrj phih frap xrkm"    // change
   }
 });
 
-/*
-========================================
-🌿 MIDDLEWARE
-========================================
-*/
+// ================================
+// 🌿 MIDDLEWARE
+// ================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/output", express.static(path.join(__dirname, "output"))); // serve generated videos
 
-// Auth middleware for magic links
+// Auth middleware
 function requireAuth(req, res, next) {
   const token = req.query.token || req.body.token;
-  if (!tokens[token]) return res.send("Not authorized");
-  const email = tokens[token];
-  if (!isSubscribed(email)) return res.send("❌ You are not subscribed");
-  req.email = email;
+  if (!tokens[token]) {
+    return res.send("Not authorized");
+  }
   next();
 }
 
-/*
-========================================
-🌿 ROUTES
-========================================
-*/
+// ================================
+// 🌿 PAYHIP MEMBERSHIP CHECK
+// ================================
+async function isSubscribed(email) {
+  // Replace with your Payhip API call
+  // Example using fetch (needs node-fetch installed)
+  const PAYHIP_API_KEY = "6f67d35d72eb1a0aceec39aeae9d75254a4cf79b";
+
+  try {
+    const response = await fetch(`https://payhip.com/api/v1/memberships?api_key=${PAYHIP_API_KEY}`);
+    const data = await response.json();
+
+    // data.members is an array of subscriber emails
+    return data.members.some(member => member.email.toLowerCase() === email.toLowerCase());
+  } catch (err) {
+    console.error("Payhip API error:", err);
+    return false;
+  }
+}
+
+// ================================
+// 🌿 ROUTES
+// ================================
 
 // Health check
 app.get("/", (req, res) => {
   res.send("Greeting Card API running 🚀");
 });
 
-/*
-----------------------------------------
-STEP 1 — Magic link form
-----------------------------------------
-*/
+// STEP 1 — Magic link form
 app.get("/start", (req, res) => {
   res.send(`
     <h2>Enter your email</h2>
@@ -117,15 +84,12 @@ app.get("/start", (req, res) => {
   `);
 });
 
-/*
-----------------------------------------
-STEP 2 — Send magic link
-----------------------------------------
-*/
+// STEP 2 — Send magic link
 app.post("/send-link", async (req, res) => {
   const email = req.body.email.toLowerCase();
 
-  if (!isSubscribed(email)) {
+  const subscribed = await isSubscribed(email);
+  if (!subscribed) {
     return res.send("❌ You are not subscribed");
   }
 
@@ -145,16 +109,14 @@ app.post("/send-link", async (req, res) => {
   res.send("✅ Email sent! Check your inbox.");
 });
 
-/*
-----------------------------------------
-STEP 3 — Verify token
-----------------------------------------
-*/
+// STEP 3 — Verify token
 app.get("/verify", (req, res) => {
   const { token } = req.query;
+
   if (!tokens[token]) return res.send("❌ Invalid or expired link");
 
   const email = tokens[token];
+
   res.send(`
     <h2>Welcome ${email} 🎉</h2>
     <p>You are verified!</p>
@@ -162,11 +124,7 @@ app.get("/verify", (req, res) => {
   `);
 });
 
-/*
-----------------------------------------
-STEP 4 — Gallery (protected)
-----------------------------------------
-*/
+// STEP 4 — Gallery (protected)
 app.get("/gallery", requireAuth, (req, res) => {
   const token = req.query.token;
   res.send(`
@@ -178,11 +136,7 @@ app.get("/gallery", requireAuth, (req, res) => {
   `);
 });
 
-/*
-----------------------------------------
-STEP 5 — Personalization form (protected)
-----------------------------------------
-*/
+// STEP 5 — Personalization form (protected)
 app.get("/personalize", requireAuth, (req, res) => {
   const card = req.query.card;
   const token = req.query.token;
@@ -207,11 +161,7 @@ app.get("/personalize", requireAuth, (req, res) => {
   `);
 });
 
-/*
-----------------------------------------
-STEP 6 — Render personalized video (POST, protected)
-----------------------------------------
-*/
+// STEP 6 — Render personalized video (POST, protected)
 app.post("/render-video", requireAuth, (req, res) => {
   const { card, line1, line2, signature, token } = req.body;
 
@@ -268,48 +218,9 @@ app.post("/render-video", requireAuth, (req, res) => {
     });
 });
 
-/*
-========================================
-🌿 PAYHIP WEBHOOKS
-========================================
-*/
-app.post("/payhip-webhook", (req, res) => {
-  const { event, email } = req.body;
-  if (!email) return res.status(400).send("No email provided");
-
-  if (event === "subscription.created" || event === "paid") {
-    addSubscriber(email);
-    console.log(`Added subscriber: ${email}`);
-  }
-  if (event === "subscription.deleted" || event === "refunded") {
-    removeSubscriber(email);
-    console.log(`Removed subscriber: ${email}`);
-  }
-
-  res.status(200).send("Webhook received");
-});
-
-/*
-========================================
-🌿 DEBUG ROUTE (temporary)
-========================================
-*/
-app.get("/debug-subs", (req, res) => {
-  res.json(getSubscribers());
-});
-
-/*
-========================================
-🌿 START SERVER
-========================================
-*/
+// ================================
+// 🌿 START SERVER
+// ================================
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
-
-
-
-
-
-
-
