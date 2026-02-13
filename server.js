@@ -273,6 +273,7 @@ app.post("/render-video", requireAuth, (req, res) => {
 🌿 PAYHIP WEBHOOKS
 ========================================
 */
+app.use(express.json());
 app.post("/payhip-webhook", (req, res) => {
   const { event, email } = req.body;
   if (!email) return res.status(400).send("No email provided");
