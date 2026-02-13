@@ -1,5 +1,5 @@
 /**
- * server.js — Fixed version for Render deployment
+ * server.js — Fixed version for Render deployment with SendGrid
  */
 
 const express = require("express");
@@ -62,14 +62,14 @@ const tokens = {}; // token -> email
 
 /*
 ========================================
-📨 MAILER SETUP (Gmail)
+📨 MAILER SETUP — SendGrid
 ========================================
 */
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  service: "SendGrid",
   auth: {
-    user: "gaston.ditommaso.2@gmail.com",      // 👈 change
-    pass: "mhrj phih frap xrkm"                 // 👈 change
+    user: "apikey",                 // literal string "apikey"
+    pass: process.env.EMAIL_API_KEY // your SendGrid API key from Render env
   }
 });
 
@@ -95,8 +95,7 @@ function requireAuth(req, res, next) {
 /*
 ========================================
 🌿 ROUTES
-========================================
-*/
+========================================*/
 
 // Health check
 app.get("/", (req, res) => {
@@ -135,15 +134,20 @@ app.post("/send-link", async (req, res) => {
 
   const link = `${process.env.BASE_URL || "http://localhost:" + PORT}/verify?token=${token}`;
 
-  await transporter.sendMail({
-    from: "Greeting Cards",
-    to: email,
-    subject: "Your magic link ✨",
-    html: `<h2>Create your card</h2>
-           <a href="${link}">Click here to continue</a>`
-  });
+  try {
+    await transporter.sendMail({
+      from: "Greeting Cards <no-reply@greetingcards.com>",
+      to: email,
+      subject: "Your magic link ✨",
+      html: `<h2>Create your card</h2>
+             <a href="${link}">Click here to continue</a>`
+    });
 
-  res.send("✅ Email sent! Check your inbox.");
+    res.send("✅ Email sent! Check your inbox.");
+  } catch (err) {
+    console.error("Error sending email:", err);
+    res.status(500).send("❌ Could not send email, please try again later");
+  }
 });
 
 /*
@@ -302,8 +306,7 @@ app.get("/debug-subs", (req, res) => {
 /*
 ========================================
 🌿 START SERVER
-========================================
-*/
+========================================*/
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
