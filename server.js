@@ -99,7 +99,7 @@ function requireAuth(req, res, next) {
 
 // Health check
 app.get("/", (req, res) => {
-  res.send("Greeting Card API running 🚀");
+  res.send("Greeting Card API running 🚀 v2");
 });
 
 /*
