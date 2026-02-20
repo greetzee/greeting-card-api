@@ -66,10 +66,11 @@ const tokens = {}; // token -> email
 ========================================
 */
 const transporter = nodemailer.createTransport({
-  service: "SendGrid",
+  host: "smtp.sendgrid.net",
+  port: 587,
   auth: {
-    user: "apikey",                 // literal string "apikey"
-    pass: process.env.EMAIL_API_KEY // your SendGrid API key from Render env
+    user: "apikey", // must literally be this word
+    pass: process.env.EMAIL_API_KEY
   }
 });
 
