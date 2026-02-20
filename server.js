@@ -139,7 +139,7 @@ app.post("/send-link", async (req, res) => {
 
   try {
     await transporter.sendMail({
-      from: "Greeting Cards <no-reply@greetingcards.com>",
+      from: "Greeting Cards <gaston.greetzee@gmail.com>",
       to: email,
       subject: "Your magic link ✨",
       html: `<h2>Create your card</h2>
