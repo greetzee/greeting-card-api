@@ -68,8 +68,9 @@ const tokens = {}; // token -> email
 const transporter = nodemailer.createTransport({
   host: "smtp.sendgrid.net",
   port: 587,
+  secure: false,
   auth: {
-    user: "apikey", // must literally be this word
+    user: "apikey",
     pass: process.env.EMAIL_API_KEY
   }
 });
@@ -138,6 +139,8 @@ app.post("/send-link", async (req, res) => {
   const link = `${process.env.BASE_URL || "http://localhost:" + PORT}/verify?token=${token}`;
 
   try {
+    console.log("Attempting to send email...");
+
     await transporter.sendMail({
       from: "Greeting Cards <gaston.greetzee@gmail.com>",
       to: email,
@@ -145,6 +148,8 @@ app.post("/send-link", async (req, res) => {
       html: `<h2>Create your card</h2>
              <a href="${link}">Click here to continue</a>`
     });
+
+    console.log("Email sent successfully");
 
     res.send("✅ Email sent! Check your inbox.");
   } catch (err) {
