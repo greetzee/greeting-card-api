@@ -123,6 +123,8 @@ STEP 2 — Send magic link
 ----------------------------------------
 */
 app.post("/send-link", async (req, res) => {
+  console.log("Send link route hit", req.body);
+  
   const email = req.body.email.toLowerCase();
 
   if (!isSubscribed(email)) {
