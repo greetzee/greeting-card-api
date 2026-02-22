@@ -1,52 +1,81 @@
 /**
- * server.js — Fixed version for Render deployment with SendGrid
+ * server.js — Stable version for Render deployment with SendGrid API
  */
 
 const express = require("express");
-const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
+
+/*
+========================================
+📨 SENDGRID SETUP
+========================================
+*/
+if (!process.env.EMAIL_API_KEY) {
+  console.error("❌ EMAIL_API_KEY is missing in environment variables");
+} else {
+  console.log("✅ SendGrid API key loaded");
+}
+
+sgMail.setApiKey(process.env.EMAIL_API_KEY);
+
+/*
+========================================
+🌿 ENSURE DATA FOLDER EXISTS
+========================================
+*/
+const dataDir = path.join(__dirname, "data");
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir);
+}
 
 /*
 ========================================
 🌿 SUBSCRIBERS DATABASE (JSON)
 ========================================
 */
-const subscribersFile = path.join(__dirname, "data", "subscribers.json");
+const subscribersFile = path.join(dataDir, "subscribers.json");
 
 function getSubscribers() {
   try {
-    if (!fs.existsSync(subscribersFile)) fs.writeFileSync(subscribersFile, "[]");
+    if (!fs.existsSync(subscribersFile)) {
+      fs.writeFileSync(subscribersFile, "[]");
+    }
     const data = fs.readFileSync(subscribersFile);
     return JSON.parse(data);
   } catch (err) {
-    console.error("Error reading subscribers.json:", err);
+    console.error("Error reading subscribers:", err);
     return [];
   }
 }
 
 function addSubscriber(email) {
   const subs = getSubscribers();
-  if (!subs.includes(email.toLowerCase())) {
-    subs.push(email.toLowerCase());
+  const lower = email.toLowerCase();
+
+  if (!subs.includes(lower)) {
+    subs.push(lower);
     fs.writeFileSync(subscribersFile, JSON.stringify(subs, null, 2));
+    console.log("Subscriber added:", lower);
   }
 }
 
 function removeSubscriber(email) {
   let subs = getSubscribers();
-  subs = subs.filter(e => e.toLowerCase() !== email.toLowerCase());
+  subs = subs.filter(e => e !== email.toLowerCase());
   fs.writeFileSync(subscribersFile, JSON.stringify(subs, null, 2));
+  console.log("Subscriber removed:", email);
 }
 
 function isSubscribed(email) {
   const subs = getSubscribers();
-  return subs.some(e => e.toLowerCase() === email.toLowerCase());
+  return subs.includes(email.toLowerCase());
 }
 
 /*
@@ -55,35 +84,6 @@ function isSubscribed(email) {
 ========================================
 */
 const tokens = {};
-
-/*
-========================================
-📨 MAILER SETUP — SendGrid
-========================================
-*/
-const transporter = nodemailer.createTransport({
-  host: "smtp.sendgrid.net",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "apikey",
-    pass: process.env.EMAIL_API_KEY
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000
-});
-
-/*
-TEST SENDGRID CONNECTION ON STARTUP
-*/
-transporter.verify(function (error, success) {
-  if (error) {
-    console.log("❌ SendGrid connection error:", error);
-  } else {
-    console.log("✅ SendGrid is ready to send emails");
-  }
-});
 
 /*
 ========================================
@@ -96,98 +96,112 @@ app.use("/output", express.static(path.join(__dirname, "output")));
 
 function requireAuth(req, res, next) {
   const token = req.query.token || req.body.token;
-  if (!tokens[token]) return res.send("Not authorized");
+
+  if (!tokens[token]) {
+    return res.send("Not authorized");
+  }
+
   const email = tokens[token];
-  if (!isSubscribed(email)) return res.send("❌ You are not subscribed");
+
+  if (!isSubscribed(email)) {
+    return res.send("❌ You are not subscribed");
+  }
+
   req.email = email;
   next();
 }
 
 /*
 ========================================
-🌿 ROUTES
+ROOT
 ========================================
 */
-
 app.get("/", (req, res) => {
-  res.send("Greeting Card API running 🚀 v2");
+  res.send("Greeting Card API running 🚀");
 });
 
 /*
-STEP 1
+========================================
+STEP 1 — START
+========================================
 */
 app.get("/start", (req, res) => {
   res.send(`
     <h2>Enter your email</h2>
     <form method="POST" action="/send-link">
-      <input name="email" placeholder="email" required />
+      <input name="email" type="email" required />
       <button type="submit">Send magic link</button>
     </form>
   `);
 });
 
 /*
-STEP 2 — Send magic link
+========================================
+STEP 2 — SEND MAGIC LINK
+========================================
 */
 app.post("/send-link", async (req, res) => {
-  console.log("Send link route hit", req.body);
+  console.log("Send link route hit:", req.body);
+
+  if (!req.body.email) {
+    return res.send("No email provided");
+  }
 
   const email = req.body.email.toLowerCase();
 
+  console.log("Checking subscription for:", email);
+
   if (!isSubscribed(email)) {
+    console.log("User not subscribed");
     return res.send("❌ You are not subscribed");
   }
 
   const token = crypto.randomBytes(24).toString("hex");
   tokens[token] = email;
 
-  const link = `${process.env.BASE_URL || "http://localhost:" + PORT}/verify?token=${token}`;
+  const base =
+    process.env.BASE_URL ||
+    `https://${req.headers.host}`;
+
+  const link = `${base}/verify?token=${token}`;
+
+  console.log("Magic link generated:", link);
+
+  const msg = {
+    to: email,
+    from: "gaston.greetzee@gmail.com", // must be verified in SendGrid
+    subject: "Your magic link ✨",
+    html: `
+      <h2>Create your card</h2>
+      <p>Click below to continue:</p>
+      <a href="${link}">${link}</a>
+    `
+  };
 
   try {
-    console.log("Attempting to send email...");
-
-    await transporter.sendMail({
-      from: "Greeting Cards <gaston.greetzee@gmail.com>", // must be verified in SendGrid
-      to: email,
-      subject: "Your magic link ✨",
-      html: `<h2>Create your card</h2>
-             <a href="${link}">Click here to continue</a>`
-    });
-
-    console.log("Email sent successfully");
+    console.log("Sending email via SendGrid...");
+    await sgMail.send(msg);
+    console.log("✅ Email sent successfully");
 
     res.send("✅ Email sent! Check your inbox.");
-  } catch (err) {
-    console.error("Error sending email:", err);
+  } catch (error) {
+    console.error("SendGrid error:");
+    console.error(error.response?.body || error);
     res.status(500).send("❌ Could not send email");
   }
 });
 
 /*
-DEBUG ROUTE — email test
-*/
-app.get("/test-email", async (req, res) => {
-  try {
-    await transporter.sendMail({
-      from: "Greeting Cards <gaston.greetzee@gmail.com>",
-      to: "gaston.ditommaso.2@gmail.com",
-      subject: "SendGrid test",
-      text: "If you receive this, email works."
-    });
-
-    res.send("Test email sent!");
-  } catch (err) {
-    console.error(err);
-    res.send("Email test failed");
-  }
-});
-
-/*
-STEP 3
+========================================
+STEP 3 — VERIFY LINK
+========================================
 */
 app.get("/verify", (req, res) => {
-  const { token } = req.query;
-  if (!tokens[token]) return res.send("❌ Invalid link");
+  const token = req.query.token;
+
+  if (!tokens[token]) {
+    return res.send("❌ Invalid or expired link");
+  }
 
   const email = tokens[token];
 
@@ -198,10 +212,13 @@ app.get("/verify", (req, res) => {
 });
 
 /*
-STEP 4
+========================================
+STEP 4 — GALLERY
+========================================
 */
 app.get("/gallery", requireAuth, (req, res) => {
   const token = req.query.token;
+
   res.send(`
     <h2>Choose your card</h2>
     <ul>
@@ -212,7 +229,9 @@ app.get("/gallery", requireAuth, (req, res) => {
 });
 
 /*
-STEP 5
+========================================
+STEP 5 — PERSONALIZE
+========================================
 */
 app.get("/personalize", requireAuth, (req, res) => {
   const card = req.query.card;
@@ -223,19 +242,21 @@ app.get("/personalize", requireAuth, (req, res) => {
     <form method="POST" action="/render-video">
       <input type="hidden" name="card" value="${card}" />
       <input type="hidden" name="token" value="${token}" />
-      <input name="line1" required />
-      <input name="line2" />
-      <input name="signature" />
+      <input name="line1" required placeholder="Main message"/>
+      <input name="line2" placeholder="Optional second line"/>
+      <input name="signature" placeholder="Signature"/>
       <button type="submit">Generate</button>
     </form>
   `);
 });
 
 /*
-STEP 6
+========================================
+STEP 6 — RENDER VIDEO
+========================================
 */
 app.post("/render-video", requireAuth, (req, res) => {
-  const { card, line1, line2, signature, token } = req.body;
+  const { card, line1, line2, signature } = req.body;
 
   const inputVideo = path.join(__dirname, "assets", `${card}.mp4`);
   const outputVideo = path.join(__dirname, "output", `${card}_${Date.now()}.mp4`);
@@ -259,7 +280,7 @@ app.post("/render-video", requireAuth, (req, res) => {
       filter: "drawtext",
       options: {
         fontfile: fontPath,
-        text: signature,
+        text: signature || "",
         fontsize: 32,
         fontcolor: "white",
         x: "(w-text_w)/2",
@@ -281,17 +302,22 @@ app.post("/render-video", requireAuth, (req, res) => {
       `);
     })
     .on("error", (err) => {
-      console.error(err);
-      res.send("Render error");
+      console.error("FFmpeg error:", err);
+      res.send("Video rendering error");
     });
 });
 
 /*
+========================================
 PAYHIP WEBHOOK
+========================================
 */
 app.post("/payhip-webhook", (req, res) => {
   const { event, email } = req.body;
-  if (!email) return res.status(400).send("No email");
+
+  if (!email) {
+    return res.status(400).send("No email");
+  }
 
   if (event === "subscription.created" || event === "paid") {
     addSubscriber(email);
@@ -304,12 +330,17 @@ app.post("/payhip-webhook", (req, res) => {
   res.status(200).send("Webhook received");
 });
 
+/*
+DEBUG
+*/
 app.get("/debug-subs", (req, res) => {
   res.json(getSubscribers());
 });
 
 /*
+========================================
 START SERVER
+========================================
 */
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
