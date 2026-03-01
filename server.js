@@ -321,6 +321,9 @@ app.post("/render-video", requireAuth, async (req, res) => {
       .on("start", commandLine => {
         console.log("FFmpeg started:", commandLine);
       })
+	.on("progress", progress => {
+  	console.log("Processing:", progress.percent);
+	})
       .on("end", () => {
         console.log("Video rendering finished");
 
