@@ -251,60 +251,98 @@ app.get("/personalize", requireAuth, (req, res) => {
 });
 
 /*
-========================================
-STEP 6 — RENDER VIDEO
-========================================
+----------------------------------------
+STEP 6 — Render personalized video (STABLE VERSION)
+----------------------------------------
 */
-app.post("/render-video", requireAuth, (req, res) => {
-  const { card, line1, line2, signature } = req.body;
+app.post("/render-video", requireAuth, async (req, res) => {
+  try {
+    const { card, line1, line2, signature, token } = req.body;
 
-  const inputVideo = path.join(__dirname, "assets", `${card}.mp4`);
-  const outputVideo = path.join(__dirname, "output", `${card}_${Date.now()}.mp4`);
-  const fontPath = path.join(__dirname, "assets", "font.ttf");
+    const assetsDir = path.join(__dirname, "assets");
+    const outputDir = path.join(__dirname, "output");
 
-  const message = line2 ? `${line1}\n${line2}` : line1;
-
-  const filters = [
-    {
-      filter: "drawtext",
-      options: {
-        fontfile: fontPath,
-        text: message,
-        fontsize: 48,
-        fontcolor: "yellow",
-        x: "(w-text_w)/2",
-        y: "h*0.6"
-      }
-    },
-    {
-      filter: "drawtext",
-      options: {
-        fontfile: fontPath,
-        text: signature || "",
-        fontsize: 32,
-        fontcolor: "white",
-        x: "(w-text_w)/2",
-        y: "h*0.8"
-      }
+    // Ensure output folder exists (important on Render)
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+      console.log("Created output folder");
     }
-  ];
 
-  ffmpeg(inputVideo)
-    .videoFilters(filters)
-    .outputOptions("-movflags faststart")
-    .save(outputVideo)
-    .on("end", () => {
-      res.send(`
-        <h2>Video ready!</h2>
-        <video width="480" controls>
-          <source src="/output/${path.basename(outputVideo)}" type="video/mp4">
-        </video>
-      `);
-    })
-    .on("error", (err) => {
-      console.error("FFmpeg error:", err);
-      res.send("Video rendering error");
-    });
+    const inputVideo = path.join(assetsDir, `${card}.mp4`);
+    const fontPath = path.join(assetsDir, "font.ttf");
+    const outputVideo = path.join(outputDir, `${card}_${Date.now()}.mp4`);
+
+    console.log("------ VIDEO RENDER DEBUG ------");
+    console.log("Input video:", inputVideo);
+    console.log("Font path:", fontPath);
+    console.log("Output video:", outputVideo);
+
+    // Check files exist (this prevents crashes)
+    if (!fs.existsSync(inputVideo)) {
+      console.error("Input video missing:", inputVideo);
+      return res.send("❌ Video template missing on server");
+    }
+
+    if (!fs.existsSync(fontPath)) {
+      console.error("Font missing:", fontPath);
+      return res.send("❌ Font file missing on server");
+    }
+
+    const message = line2 ? `${line1}\\n${line2}` : line1;
+
+    const filters = [
+      {
+        filter: "drawtext",
+        options: {
+          fontfile: fontPath,
+          text: message,
+          fontsize: 48,
+          fontcolor: "yellow",
+          x: "(w-text_w)/2",
+          y: "h*0.6"
+        }
+      },
+      {
+        filter: "drawtext",
+        options: {
+          fontfile: fontPath,
+          text: signature || "",
+          fontsize: 32,
+          fontcolor: "white",
+          x: "(w-text_w)/2",
+          y: "h*0.8"
+        }
+      }
+    ];
+
+    ffmpeg(inputVideo)
+      .videoFilters(filters)
+      .outputOptions("-movflags faststart")
+      .on("start", commandLine => {
+        console.log("FFmpeg started:", commandLine);
+      })
+      .on("end", () => {
+        console.log("Video rendering finished");
+
+        res.send(`
+          <h2>Video ready! 🎉</h2>
+          <video width="480" controls>
+            <source src="/output/${path.basename(outputVideo)}" type="video/mp4">
+          </video>
+          <br/><br/>
+          <a href="/gallery?token=${token}">Back to gallery</a>
+        `);
+      })
+      .on("error", err => {
+        console.error("FFmpeg error:", err.message);
+        res.send("❌ Video rendering error");
+      })
+      .save(outputVideo);
+
+  } catch (error) {
+    console.error("Render route crashed:", error);
+    res.status(500).send("Server error during rendering");
+  }
 });
 
 /*
