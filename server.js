@@ -170,12 +170,8 @@ app.post("/render-video", requireAuth, (req, res) => {
     .outputOptions(["-movflags faststart", "-crf 28"])
     .on("start", cmd => console.log("FFmpeg started:", cmd))
     .on("end", () => {
-  	console.log("Video done:", outputVideo);
- 	res.setHeader("Content-Type", "video/mp4");
- 	res.setHeader("Content-Disposition", `attachment; filename="${outputFilename}"`);
- 	const stream = fs.createReadStream(outputVideo);
-  	stream.pipe(res);
-  	stream.on("close", () => fs.unlink(outputVideo, () => {}));
+	console.log("Video done:", outputVideo);
+	res.json({ file: outputFilename });
     })
     .on("error", (err) => {
       console.error("FFmpeg error:", err.message);
@@ -194,5 +190,7 @@ app.post("/payhip-webhook", (req, res) => {
 });
 
 app.get("/debug-subs", (req, res) => res.json(getSubscribers()));
+
+app.use("/output", express.static("/tmp"));
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
