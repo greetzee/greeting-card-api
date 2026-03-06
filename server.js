@@ -100,9 +100,9 @@ app.post("/send-link", async (req, res) => {
 
   const msg = {
     to: email,
-    from: "gaston.greetzee@gmail.com",
+    from: "hello@greetzee.com",
     subject: "Your magic link ✨",
-    html: `<h2>Create your card</h2><p>Click below to continue:</p><a href__="${link}">${link}</a>`
+    html: `<h2>Create your card</h2><p>Click below to continue:</p><a href="${link}">${link}</a>`
   };
 
   await sgMail.send(msg);
