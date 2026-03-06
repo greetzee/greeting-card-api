@@ -48,15 +48,27 @@ function isSubscribed(email) {
   return getSubscribers().includes(email.toLowerCase());
 }
 
-const tokens = {};
+const tokensFile = path.join(dataDir, "tokens.json");
+function getTokens() {
+  if (!fs.existsSync(tokensFile)) fs.writeFileSync(tokensFile, "{}");
+  return JSON.parse(fs.readFileSync(tokensFile));
+}
+function saveToken(token, email) {
+  const t = getTokens();
+  t[token] = email;
+  fs.writeFileSync(tokensFile, JSON.stringify(t));
+}
+function getToken(token) {
+  return getTokens()[token];
+}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 function requireAuth(req, res, next) {
   const token = req.query.token || req.body.token;
-  if (!tokens[token]) return res.status(401).json({ error: "Not authorized" });
-  const email = tokens[token];
+  if (!getToken(token)) return res.status(401).json({ error: "Not authorized" });
+  const email = getToken(token);
   if (!isSubscribed(email)) return res.status(403).json({ error: "Not subscribed" });
   req.email = email;
   next();
@@ -82,7 +94,7 @@ app.post("/send-link", async (req, res) => {
   if (!isSubscribed(email)) return res.status(403).json({ error: "You are not subscribed" });
 
   const token = crypto.randomBytes(24).toString("hex");
-  tokens[token] = email;
+  saveToken(token, email);
   const base = process.env.BASE_URL || `https://${req.headers.host}`;
   const link = `${base}/verify?token=${token}`;
 
@@ -100,7 +112,7 @@ app.post("/send-link", async (req, res) => {
 // STEP 3 — VERIFY
 app.get("/verify", (req, res) => {
   const token = req.query.token;
-  if (!tokens[token]) return res.send("❌ Invalid or expired link");
+  if (!getToken(token)) return res.send("❌ Invalid or expired link");
   // Redirect to your Base44 frontend gallery page
   const frontendBase = process.env.FRONTEND_URL || "";
   res.redirect(`${frontendBase}/Gallery?token=${token}`);
