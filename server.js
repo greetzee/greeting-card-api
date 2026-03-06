@@ -8,124 +8,63 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
-ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-/*
-========================================
-📨 SENDGRID SETUP
-========================================
-*/
-if (!process.env.EMAIL_API_KEY) {
-  console.error("❌ EMAIL_API_KEY is missing in environment variables");
-} else {
-  console.log("✅ SendGrid API key loaded");
-}
+// ✅ CORS — allow your Base44 frontend
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
 
 sgMail.setApiKey(process.env.EMAIL_API_KEY);
 
-/*
-========================================
-🌿 ENSURE DATA FOLDER EXISTS
-========================================
-*/
 const dataDir = path.join(__dirname, "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir);
-}
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
-/*
-========================================
-🌿 SUBSCRIBERS DATABASE (JSON)
-========================================
-*/
 const subscribersFile = path.join(dataDir, "subscribers.json");
 
 function getSubscribers() {
-  try {
-    if (!fs.existsSync(subscribersFile)) {
-      fs.writeFileSync(subscribersFile, "[]");
-    }
-    const data = fs.readFileSync(subscribersFile);
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Error reading subscribers:", err);
-    return [];
-  }
+  if (!fs.existsSync(subscribersFile)) fs.writeFileSync(subscribersFile, "[]");
+  return JSON.parse(fs.readFileSync(subscribersFile));
 }
-
 function addSubscriber(email) {
   const subs = getSubscribers();
   const lower = email.toLowerCase();
-
   if (!subs.includes(lower)) {
     subs.push(lower);
     fs.writeFileSync(subscribersFile, JSON.stringify(subs, null, 2));
-    console.log("Subscriber added:", lower);
   }
 }
-
 function removeSubscriber(email) {
-  let subs = getSubscribers();
-  subs = subs.filter(e => e !== email.toLowerCase());
+  const subs = getSubscribers().filter(e => e !== email.toLowerCase());
   fs.writeFileSync(subscribersFile, JSON.stringify(subs, null, 2));
-  console.log("Subscriber removed:", email);
 }
-
 function isSubscribed(email) {
-  const subs = getSubscribers();
-  return subs.includes(email.toLowerCase());
+  return getSubscribers().includes(email.toLowerCase());
 }
 
-/*
-========================================
-🌿 TEMP TOKENS (magic link)
-========================================
-*/
 const tokens = {};
 
-/*
-========================================
-🌿 MIDDLEWARE
-========================================
-*/
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/output", express.static("/tmp"));
 
 function requireAuth(req, res, next) {
   const token = req.query.token || req.body.token;
-
-  if (!tokens[token]) {
-    return res.send("Not authorized");
-  }
-
+  if (!tokens[token]) return res.status(401).json({ error: "Not authorized" });
   const email = tokens[token];
-
-  if (!isSubscribed(email)) {
-    return res.send("❌ You are not subscribed");
-  }
-
+  if (!isSubscribed(email)) return res.status(403).json({ error: "Not subscribed" });
   req.email = email;
   next();
 }
 
-/*
-========================================
-ROOT
-========================================
-*/
-app.get("/", (req, res) => {
-  res.send("Greeting Card API running 🚀");
-});
+app.get("/", (req, res) => res.send("Greeting Card API running 🚀"));
 
-/*
-========================================
-STEP 1 — START
-========================================
-*/
+// STEP 1 — START (kept for direct browser access)
 app.get("/start", (req, res) => {
   res.send(`
     <h2>Enter your email</h2>
@@ -136,268 +75,103 @@ app.get("/start", (req, res) => {
   `);
 });
 
-/*
-========================================
-STEP 2 — SEND MAGIC LINK
-========================================
-*/
+// STEP 2 — SEND MAGIC LINK
 app.post("/send-link", async (req, res) => {
-  console.log("Send link route hit:", req.body);
-
-  if (!req.body.email) {
-    return res.send("No email provided");
-  }
-
+  if (!req.body.email) return res.status(400).json({ error: "No email provided" });
   const email = req.body.email.toLowerCase();
-
-  console.log("Checking subscription for:", email);
-
-  if (!isSubscribed(email)) {
-    console.log("User not subscribed");
-    return res.send("❌ You are not subscribed");
-  }
+  if (!isSubscribed(email)) return res.status(403).json({ error: "You are not subscribed" });
 
   const token = crypto.randomBytes(24).toString("hex");
   tokens[token] = email;
-
-  const base =
-    process.env.BASE_URL ||
-    `https://${req.headers.host}`;
-
+  const base = process.env.BASE_URL || `https://${req.headers.host}`;
   const link = `${base}/verify?token=${token}`;
-
-  console.log("Magic link generated:", link);
 
   const msg = {
     to: email,
-    from: "gaston.greetzee@gmail.com", // it is verified in SendGrid
+    from: "gaston.greetzee@gmail.com",
     subject: "Your magic link ✨",
-    html: `
-      <h2>Create your card</h2>
-      <p>Click below to continue:</p>
-      <a href="${link}">${link}</a>
-    `
+    html: `<h2>Create your card</h2><p>Click below to continue:</p><a href__="${link}">${link}</a>`
   };
 
-  try {
-    console.log("Sending email via SendGrid...");
-    await sgMail.send(msg);
-    console.log("✅ Email sent successfully");
-
-    res.send("✅ Email sent! Check your inbox.");
-  } catch (error) {
-    console.error("SendGrid error:");
-    console.error(error.response?.body || error);
-    res.status(500).send("❌ Could not send email");
-  }
+  await sgMail.send(msg);
+  res.json({ success: true });
 });
 
-/*
-========================================
-STEP 3 — VERIFY LINK
-========================================
-*/
+// STEP 3 — VERIFY
 app.get("/verify", (req, res) => {
   const token = req.query.token;
-
-  if (!tokens[token]) {
-    return res.send("❌ Invalid or expired link");
-  }
-
-  const email = tokens[token];
-
-  res.send(`
-    <h2>Welcome ${email} 🎉</h2>
-    <a href="/gallery?token=${token}">Go to gallery</a>
-  `);
+  if (!tokens[token]) return res.send("❌ Invalid or expired link");
+  // Redirect to your Base44 frontend gallery page
+  const frontendBase = process.env.FRONTEND_URL || "";
+  res.redirect(`${frontendBase}/Gallery?token=${token}`);
 });
 
-/*
-========================================
-STEP 4 — GALLERY
-========================================
-*/
+// STEP 4 — GALLERY (API)
 app.get("/gallery", requireAuth, (req, res) => {
-  const token = req.query.token;
-
-  res.send(`
-    <h2>Choose your card</h2>
-    <ul>
-      <li><a href="/personalize?card=soft&token=${token}">Soft Card</a></li>
-      <li><a href="/personalize?card=fun&token=${token}">Fun Card</a></li>
-    </ul>
-  `);
+  res.json({ cards: ["soft", "fun"] });
 });
 
-/*
-========================================
-STEP 5 — PERSONALIZE
-========================================
-*/
+// STEP 5 — PERSONALIZE (API)
 app.get("/personalize", requireAuth, (req, res) => {
-  const card = req.query.card;
-  const token = req.query.token;
-
-  res.send(`
-    <h2>Personalize your "${card}" card</h2>
-    <form method="POST" action="/render-video">
-      <input type="hidden" name="card" value="${card}" />
-      <input type="hidden" name="token" value="${token}" />
-      <input name="line1" required placeholder="Main message"/>
-      <input name="line2" placeholder="Optional second line"/>
-      <input name="signature" placeholder="Signature"/>
-      <button type="submit">Generate</button>
-    </form>
-  `);
+  res.json({ card: req.query.card });
 });
 
-/*
-----------------------------------------
-STEP 6 — Render personalized video (STABLE VERSION)
-----------------------------------------
-*/
-app.post("/render-video", requireAuth, async (req, res) => {
-  try {
-    const { card, line1, line2, signature, token } = req.body;
+// STEP 6 — RENDER VIDEO (FIXED)
+app.post("/render-video", requireAuth, (req, res) => {
+  const { card, line1, line2, signature } = req.body;
+  const assetsDir = path.join(__dirname, "assets");
+  const outputDir = "/tmp"; // ✅ Use /tmp on Render
+  const inputVideo = path.join(assetsDir, `${card}.mp4`);
+  const fontPath = path.join(assetsDir, "font.ttf");
+  const outputFilename = `${card}_${Date.now()}.mp4`;
+  const outputVideo = path.join(outputDir, outputFilename);
 
-    const assetsDir = path.join(__dirname, "assets");
-    const outputDir = "/tmp";
+  if (!fs.existsSync(inputVideo)) return res.status(500).json({ error: "Video template missing" });
+  if (!fs.existsSync(fontPath)) return res.status(500).json({ error: "Font file missing" });
 
-    // Ensure output folder exists (important on Render)
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-      console.log("Created output folder");
+  const message = line2 ? `${line1}\\n${line2}` : line1;
+
+  const filters = [
+    {
+      filter: "drawtext",
+      options: { fontfile: fontPath, text: message, fontsize: 48, fontcolor: "yellow", x: "(w-text_w)/2", y: "h*0.6" }
+    },
+    {
+      filter: "drawtext",
+      options: { fontfile: fontPath, text: signature || "", fontsize: 32, fontcolor: "white", x: "(w-text_w)/2", y: "h*0.8" }
     }
+  ];
 
-    const inputVideo = path.join(assetsDir, `${card}.mp4`);
-    const fontPath = path.join(assetsDir, "font.ttf");
-    const outputVideo = path.join(outputDir, `${card}_${Date.now()}.mp4`);
-
-    console.log("------ VIDEO RENDER DEBUG ------");
-    console.log("Input video:", inputVideo);
-    console.log("Font path:", fontPath);
-    console.log("Output video:", outputVideo);
-
-    // Check files exist (this prevents crashes)
-    if (!fs.existsSync(inputVideo)) {
-      console.error("Input video missing:", inputVideo);
-      return res.send("❌ Video template missing on server");
-    }
-
-    if (!fs.existsSync(fontPath)) {
-      console.error("Font missing:", fontPath);
-      return res.send("❌ Font file missing on server");
-    }
-
-    const message = line2 ? `${line1}\\n${line2}` : line1;
-
-    const filters = [
-      {
-        filter: "drawtext",
-        options: {
-          fontfile: fontPath,
-          text: message,
-          fontsize: 48,
-          fontcolor: "yellow",
-          x: "(w-text_w)/2",
-          y: "h*0.6"
-        }
-      },
-      {
-        filter: "drawtext",
-        options: {
-          fontfile: fontPath,
-          text: signature || "",
-          fontsize: 32,
-          fontcolor: "white",
-          x: "(w-text_w)/2",
-          y: "h*0.8"
-        }
-      }
-    ];
-
-    ffmpeg(inputVideo)
-      .videoFilters([
-  	...filters,
- 	{
- 	  filter: "scale",
- 	  options: {
- 	     w: 720,
- 	     h: -1
- 	  }
-  	}
-      ])
-      .outputOptions([
-  	"-movflags faststart",
- 	 "-preset ultrafast",
- 	 "-crf 30",
-  	 "-threads 1"
-      ])
-      .on("start", commandLine => {
-        console.log("FFmpeg started:", commandLine);
-      })
-	.on("progress", progress => {
-  	console.log("Processing:", progress.percent);
-	})
-      .on("end", () => {
-        console.log("Video rendering finished");
-
-        res.send(`
-          <h2>Video ready! 🎉</h2>
-          <video width="480" controls>
-            <source src="/output/${path.basename(outputVideo)}" type="video/mp4">
-          </video>
-          <br/><br/>
-          <a href="/gallery?token=${token}">Back to gallery</a>
-        `);
-      })
-      .on("error", err => {
-        console.error("FFmpeg error:", err.message);
-        res.send("❌ Video rendering error");
-      })
-      .save(outputVideo);
-
-  } catch (error) {
-    console.error("Render route crashed:", error);
-    res.status(500).send("Server error during rendering");
-  }
+  ffmpeg(inputVideo)
+    .videoFilters(filters)
+    .outputOptions([
+      "-movflags faststart",
+      "-preset ultrafast", // ✅ Much less CPU/RAM — prevents crash
+      "-crf 28"            // ✅ Reduces memory usage during encoding
+    ])
+    .on("start", cmd => console.log("FFmpeg started:", cmd))
+    .on("end", () => {
+      console.log("Video done:", outputVideo);
+      res.download(outputVideo, outputFilename, (err) => {
+        if (!err) fs.unlink(outputVideo, () => {}); // cleanup /tmp
+      });
+    })
+    .on("error", (err) => {
+      console.error("FFmpeg error:", err.message);
+      if (!res.headersSent) res.status(500).json({ error: "Rendering failed" });
+    })
+    .save(outputVideo);
 });
 
-/*
-========================================
-PAYHIP WEBHOOK
-========================================
-*/
+// PAYHIP WEBHOOK
 app.post("/payhip-webhook", (req, res) => {
   const { event, email } = req.body;
-
-  if (!email) {
-    return res.status(400).send("No email");
-  }
-
-  if (event === "subscription.created" || event === "paid") {
-    addSubscriber(email);
-  }
-
-  if (event === "subscription.deleted" || event === "refunded") {
-    removeSubscriber(email);
-  }
-
+  if (!email) return res.status(400).send("No email");
+  if (event === "subscription.created" || event === "paid") addSubscriber(email);
+  if (event === "subscription.deleted" || event === "refunded") removeSubscriber(email);
   res.status(200).send("Webhook received");
 });
 
-/*
-DEBUG
-*/
-app.get("/debug-subs", (req, res) => {
-  res.json(getSubscribers());
-});
+app.get("/debug-subs", (req, res) => res.json(getSubscribers()));
 
-/*
-========================================
-START SERVER
-========================================
-*/
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
