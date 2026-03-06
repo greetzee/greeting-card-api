@@ -153,17 +153,15 @@ app.post("/render-video", requireAuth, (req, res) => {
  	  }
   	}
       ])
-    .outputOptions([
-      "-movflags faststart",
-      "-preset ultrafast", // ✅ Much less CPU/RAM — prevents crash
-      "-crf 28"            // ✅ Reduces memory usage during encoding
-    ])
+    .outputOptions(["-movflags faststart", "-crf 28"])
     .on("start", cmd => console.log("FFmpeg started:", cmd))
     .on("end", () => {
-      console.log("Video done:", outputVideo);
-      res.download(outputVideo, outputFilename, (err) => {
-        if (!err) fs.unlink(outputVideo, () => {}); // cleanup /tmp
-      });
+  	console.log("Video done:", outputVideo);
+ 	res.setHeader("Content-Type", "video/mp4");
+ 	res.setHeader("Content-Disposition", `attachment; filename="${outputFilename}"`);
+ 	const stream = fs.createReadStream(outputVideo);
+  	stream.pipe(res);
+  	stream.on("close", () => fs.unlink(outputVideo, () => {}));
     })
     .on("error", (err) => {
       console.error("FFmpeg error:", err.message);
