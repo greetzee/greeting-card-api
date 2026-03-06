@@ -143,7 +143,16 @@ app.post("/render-video", requireAuth, (req, res) => {
   ];
 
   ffmpeg(inputVideo)
-    .videoFilters(filters)
+    .videoFilters([
+  	...filters,
+ 	{
+ 	  filter: "scale",
+ 	  options: {
+ 	     w: 720,
+ 	     h: 720
+ 	  }
+  	}
+      ])
     .outputOptions([
       "-movflags faststart",
       "-preset ultrafast", // ✅ Much less CPU/RAM — prevents crash
