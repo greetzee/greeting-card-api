@@ -1,0 +1,32 @@
+{
+  "grtz_bearday_eng": {
+    "id": "grtz_bearday_eng",
+    "name": "Happy Bearthday",
+    "occasion": "Birthday",
+    "video": "grtz_bearday_eng.mp4",
+    "preview": "grtz_bearday_eng_preview.mp4",
+    "textZones": [
+      {
+        "field": "line1",
+        "fontsize": 52,
+        "fontcolor": "white",
+        "x": "(w-text_w)/2",
+        "y": "h*0.12"
+      },
+      {
+        "field": "line2",
+        "fontsize": 52,
+        "fontcolor": "white",
+        "x": "(w-text_w)/2",
+        "y": "h*0.20"
+      },
+      {
+        "field": "signature",
+        "fontsize": 36,
+        "fontcolor": "white",
+        "x": "(w-text_w)/2",
+        "y": "h*0.30"
+      }
+    ]
+  }
+}
