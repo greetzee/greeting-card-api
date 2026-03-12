@@ -8,6 +8,7 @@
     "textZones": [
       {
         "field": "line1",
+        "font": "playfair.ttf",
         "fontsize": 60,
         "fontcolor": "#333333",
         "x": 1052,
@@ -19,10 +20,11 @@
       },
       {
         "field": "line2",
+        "font": "playfair.ttf",
         "fontsize": 60,
         "fontcolor": "#333333",
         "x": 1052,
-        "y": 554,
+        "y": 603,
         "start": 13.25,
         "end": 15,
         "fadeDuration": 1.5,
@@ -30,6 +32,7 @@
       },
       {
         "field": "signature",
+        "font": "playfair.ttf",
         "fontsize": 32,
         "fontcolor": "#333333",
         "x": 1052,
