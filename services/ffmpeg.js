@@ -19,28 +19,32 @@ function renderVideo(card, fields, outputPath) {
         const end = zone.end ?? 15;
         const fadeDur = zone.fadeDuration ?? 1;
         const slide = zone.slideDistance ?? 0;
+        const color = zone.fontcolor.replace("#", "0x");
 
-        const alpha = `if(lt(t,${start}),0,if(lt(t,${start}+${fadeDur}),(t-${start})/${fadeDur},1))`;
-        const yExpr = `${zone.y}+${slide}*if(lt(t,${start}+${fadeDur}),1-(t-${start})/${fadeDur},0)`;
+        const alpha = `if(lt(t\\,${start})\\,0\\,if(lt(t\\,${start}+${fadeDur})\\,(t-${start})/${fadeDur}\\,1))`;
+        const yExpr = `${zone.y}+${slide}*if(lt(t\\,${start}+${fadeDur})\\,1-(t-${start})/${fadeDur}\\,0)`;
 
         return [
           `drawtext=fontfile='${fontFile}'`,
           `text='${text}'`,
-          `fontcolor=${zone.fontcolor}`,
+          `fontcolor=${color}`,
           `fontsize=${zone.fontsize}`,
           `x=${zone.x}`,
           `y=${yExpr}`,
           `alpha='${alpha}'`,
-          `enable='between(t,${start},${end})'`
+          `enable='between(t\\,${start}\\,${end})'`
         ].join(":");
       });
 
+    // Scale first, then overlay text
+    const filterComplex = [`scale=720:720`, ...drawtextFilters].join(",");
+
     ffmpeg(inputVideo)
-      .videoFilters([
-        { filter: "scale", options: { w: 720, h: 720 } }
+      .outputOptions([
+        `-filter_complex`, filterComplex,
+        `-movflags`, `faststart`,
+        `-crf`, `28`
       ])
-      .complexFilter(drawtextFilters.join(","))
-      .outputOptions(["-movflags faststart", "-crf 28"])
       .on("start", cmd => console.log("FFmpeg started:", cmd))
       .on("end", () => resolve())
       .on("error", err => reject(err))
