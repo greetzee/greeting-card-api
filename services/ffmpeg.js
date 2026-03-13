@@ -21,22 +21,27 @@ function renderVideo(card, fields, outputPath) {
         const slide = zone.slideDistance ?? 0;
         const color = zone.fontcolor.replace("#", "0x");
 
-        const alpha = `if(lt(t\\,${start})\\,0\\,if(lt(t\\,${start}+${fadeDur})\\,(t-${start})/${fadeDur}\\,1))`;
-        const yExpr = `${zone.y}+${slide}*if(lt(t\\,${start}+${fadeDur})\\,1-(t-${start})/${fadeDur}\\,0)`;
+        const xExpr = zone.align === "center" ? `(720-text_w)/2` : `${zone.x}`;
+
+        // Smoothstep ease-out: p = linear progress, smooth = 3p²-2p³
+        const p = `(t-${start})/${fadeDur}`;
+        const smooth = `(3*(${p})*(${p})-2*(${p})*(${p})*(${p}))`;
+
+        const alpha = `if(lt(t\\,${start})\\,0\\,if(lt(t\\,${start}+${fadeDur})\\,${smooth}\\,1))`;
+        const yExpr = `${zone.y}-${slide}*if(lt(t\\,${start}+${fadeDur})\\,1-${smooth}\\,0)`;
 
         return [
           `drawtext=fontfile='${fontFile}'`,
           `text='${text}'`,
           `fontcolor=${color}`,
           `fontsize=${zone.fontsize}`,
-          `x=${zone.x}`,
+          `x=${xExpr}`,
           `y=${yExpr}`,
           `alpha='${alpha}'`,
           `enable='between(t\\,${start}\\,${end})'`
         ].join(":");
       });
 
-    // Scale first, then overlay text
     const filterComplex = [`scale=720:720`, ...drawtextFilters].join(",");
 
     ffmpeg(inputVideo)
