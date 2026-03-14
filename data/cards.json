@@ -10,40 +10,40 @@
         "field": "line1",
         "font": "playfair.ttf",
         "align": "center",
-        "fontsize": 60,
-        "fontcolor": "#333333",
+        "fontsize": 36,
+        "fontcolor": "#483695",
         "x": 360,
-        "y": 207,
+        "y": 175,
         "start": 13,
         "end": 15,
-        "fadeDuration": 1.0,
-        "slideDistance": 20
+        "fadeDuration": 0.5,
+        "slideDistance": 10
       },
       {
         "field": "line2",
         "font": "playfair.ttf",
         "align": "center",
-        "fontsize": 60,
-        "fontcolor": "#333333",
+        "fontsize": 36,
+        "fontcolor": "#483695",
         "x": 360,
-        "y": 243,
+        "y": 216,
         "start": 13.25,
         "end": 15,
-        "fadeDuration": 1.0,
-        "slideDistance": 20
+        "fadeDuration": 0.5,
+        "slideDistance": 10
       },
       {
         "field": "signature",
-        "font": "playfair.ttf",
+        "font": "playfair_italic.ttf",
         "align": "center",
-        "fontsize": 32,
-        "fontcolor": "#333333",
+        "fontsize": 30,
+        "fontcolor": "#483695",
         "x": 360,
-        "y": 279,
+        "y": 261,
         "start": 13.5,
         "end": 15,
-        "fadeDuration": 1.0,
-        "slideDistance": 20
+        "fadeDuration": 0.5,
+        "slideDistance": 10
       }
     ]
   }
