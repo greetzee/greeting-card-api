@@ -31,7 +31,7 @@ function renderVideo(card, fields, outputPath) {
         const xExpr = zone.align === "center" ? `(720-text_w)/2` : `${zone.x}`;
         const p = `(t-${start})/${fadeDur}`;
         const smooth = `(3*(${p})*(${p})-2*(${p})*(${p})*(${p}))`;
-        const alpha = `if(lt(t\\,${start})\\,0\\,if(lt(t\\,${start}+${fadeDur})\\,${smooth}\\,1))`;
+        const alpha = `if(lt(t\\,${start})\\,0\\,if(lt(t\\,${start}+${fadeDur})\\,(t-${start})/${fadeDur}\\,1))`;
         const yExpr = `${zone.y}-${slide}*if(lt(t\\,${start}+${fadeDur})\\,1-${smooth}\\,0)`;
 
         return [
