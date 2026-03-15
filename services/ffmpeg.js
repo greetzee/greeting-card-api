@@ -53,10 +53,12 @@ function renderVideo(card, fields, outputPath) {
     const drawtextChain = drawtextFilters.join(",");
 
     const filterComplex = [
-      `[0:v]trim=0:${splitTime},setpts=PTS-STARTPTS[vhead]`,
-      `[0:a]atrim=0:${splitTime},asetpts=PTS-STARTPTS[ahead]`,
-      `[0:v]trim=${splitTime},setpts=PTS-STARTPTS,scale=720:720${drawtextChain ? "," + drawtextChain : ""}[vtail]`,
-      `[0:a]atrim=${splitTime},asetpts=PTS-STARTPTS[atail]`,
+      `[0:v]split[vhead_in][vtail_in]`,
+      `[0:a]asplit[ahead_in][atail_in]`,
+      `[vhead_in]trim=0:${splitTime},setpts=PTS-STARTPTS[vhead]`,
+      `[ahead_in]atrim=0:${splitTime},asetpts=PTS-STARTPTS[ahead]`,
+      `[vtail_in]trim=${splitTime},setpts=PTS-STARTPTS,scale=720:720${drawtextChain ? "," + drawtextChain : ""}[vtail]`,
+      `[atail_in]atrim=${splitTime},asetpts=PTS-STARTPTS[atail]`,
       `[vhead][ahead][vtail][atail]concat=n=2:v=1:a=1[vout][aout]`
     ].join(";");
 
